@@ -17,7 +17,7 @@ from telegram.ext import (
 # Import the keep-alive server
 from keep_alive import keep_alive
 
-# Import database and keyboard functions
+# Import database functions
 from database import (
     init_db,
     get_user,
@@ -31,17 +31,19 @@ from database import (
     approve_deposit,
     approve_withdrawal_db,
     admin_add_balance,
-    get_all_user_ids,
-    MINERS,
-    WALLETS
+    get_all_user_ids
 )
+
+# Import keyboards and miners/wallets constants
 from keyboards import (
     main_menu,
     mining_store_menu,
     single_miner_menu,
     earnings_menu,
     wallet_menu,
-    payment_methods_menu
+    payment_methods_menu,
+    MINERS,
+    WALLETS
 )
 
 # Enable logging
