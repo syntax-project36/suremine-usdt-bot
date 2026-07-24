@@ -3,9 +3,9 @@ from threading import Thread
 
 app = Flask('')
 
-@app.route('/')
+@app.route('/', methods=['GET', 'HEAD'])
 def home():
-    return "Bot is alive!"
+    return "I'm alive!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
