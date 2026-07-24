@@ -37,11 +37,10 @@ from database import (
 # Import keyboards
 from keyboards import (
     main_menu,
-    mining_store_menu,
-    single_miner_menu,
-    earnings_menu,
-    wallet_menu,
-    payment_methods_menu
+    miner_store_menu,
+    miner_detail_menu,
+    payment_methods_menu,
+    back_to_main_menu
 )
 
 # Import config constants
@@ -136,9 +135,9 @@ async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def mining_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "⛏️ *SELECT A MINING TIER BELOW TO VIEW DETAILS:*"
     if update.message:
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=mining_store_menu())
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=miner_store_menu())
     elif update.callback_query:
-        await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=mining_store_menu())
+        await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=miner_store_menu())
 
 
 async def show_single_miner(update: Update, context: ContextTypes.DEFAULT_TYPE, miner_id: str):
@@ -160,7 +159,7 @@ async def show_single_miner(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             photo=miner["image"],
             caption=text,
             parse_mode="Markdown",
-            reply_markup=single_miner_menu(miner_id)
+            reply_markup=miner_detail_menu(miner_id)
         )
 
 
@@ -170,16 +169,20 @@ async def myearnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         f"⛏️ *LIVE USDŦ MINING PROTOCOL*\n\n"
-        f"🥇 USDŦ Miner V1 ({tier['miner_v1']['count']} Nodes): {tier['miner_v1']['mined']:.2f} USDŦ\n"
-        f"🥈 USDŦ Miner V2 ({tier['miner_v2']['count']} Nodes): {tier['miner_v2']['mined']:.2f} USDŦ\n"
-        f"🥉 USDŦ Miner V3 ({tier['miner_v3']['count']} Nodes): {tier['miner_v3']['mined']:.2f} USDŦ\n\n"
+        f"🥇 USDŦ Miner V1 ({tier.get('miner_v1', {}).get('count', 0)} Nodes): {tier.get('miner_v1', {}).get('mined', 0.0):.2f} USDŦ\n"
+        f"🥈 USDŦ Miner V2 ({tier.get('miner_v2', {}).get('count', 0)} Nodes): {tier.get('miner_v2', {}).get('mined', 0.0):.2f} USDŦ\n"
+        f"🥉 USDŦ Miner V3 ({tier.get('miner_v3', {}).get('count', 0)} Nodes): {tier.get('miner_v3', {}).get('mined', 0.0):.2f} USDŦ\n\n"
         f"💰 *Cumulative USDŦ Mined:* `{total_uncollected:.2f} USDŦ`\n\n"
         f"⚡️ *Upgrade your mining power to boost USDŦ yield!*"
     )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("💰 Collect Earnings", callback_data="collect_profit")],
+        [InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu")]
+    ])
     if update.message:
-        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=earnings_menu())
+        await update.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
     elif update.callback_query:
-        await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=earnings_menu())
+        await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
 
 
 async def withdraw_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -246,11 +249,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user = update.effective_user
 
-    if data == "home":
+    if data in ["home", "main_menu"]:
         await start(update, context)
     elif data == "dashboard":
         await render_dashboard(user.id, context, query.message)
-    elif data == "usdtmining":
+    elif data == "mining_store":
         await mining_cmd(update, context)
     elif data.startswith("show_"):
         miner_id = data.replace("show_", "")
@@ -264,40 +267,65 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"🎉 Successfully collected *{collected:.2f} USDŦ* to your balance!", parse_mode="Markdown")
         await myearnings_cmd(update, context)
 
-    elif data == "wallet":
+    elif data == "payout_wallet":
         u = get_user(user.id)
         text = (
             f"💡 Your currently set USDŦ wallet is: `{u['payout_wallet']}`\n\n"
             "📤 It will be used for all future withdrawals."
         )
-        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=wallet_menu())
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✏️ Set / Change Wallet", callback_data="set_wallet")],
+            [InlineKeyboardButton("🔙 Main Menu", callback_data="main_menu")]
+        ])
+        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=kb)
 
     elif data == "set_wallet":
         context.user_data["awaiting_wallet"] = True
         await query.message.reply_text("📝 Please reply with your USDŦ wallet address:")
 
+    elif data == "referral":
+        bot_info = await context.bot.get_me()
+        user_db, ref_count, _ = get_dashboard_data(user.id)
+        text = (
+            f"👥 *REFERRAL PROGRAM*\n\n"
+            f"Invite your friends and earn bonus USDŦ rewards!\n\n"
+            f"🫟 *Standard Referral:* +25 USDŦ\n"
+            f"💎 *Premium Referral:* +35 USDŦ\n\n"
+            f"📊 *Your Referrals:* `{ref_count}` Users\n\n"
+            f"🔗 *Your Referral Link:*\n"
+            f"https://t.me/{bot_info.username}?start={user.id}"
+        )
+        await query.message.reply_text(text, parse_mode="Markdown", reply_markup=back_to_main_menu())
+
     elif data.startswith("buy_"):
         m_id = data.replace("buy_", "")
         miner = MINERS[m_id]
-        text = f"{user.first_name} Choose a crypto to complete the purchase of {miner['name']} 👇"
+        text = f"{user.first_name}, choose a cryptocurrency to complete the purchase of *{miner['name']}* (${miner['price']:.2f}) 👇"
         await query.message.reply_text(text, parse_mode="Markdown", reply_markup=payment_methods_menu(m_id))
 
     elif data.startswith("pay_"):
-        parts = data.split("_", 2)
-        crypto = parts[1]
-        m_id = parts[2]
-        miner = MINERS[m_id]
+        # Correctly parse strings like: pay_USDT_TRC20_miner_v1 or pay_SOL_miner_v1
+        parts = data.split("_")
+        miner_id = f"{parts[-2]}_{parts[-1]}"
+        crypto = "_".join(parts[1:-2])
+
+        miner = MINERS.get(miner_id)
         addr = WALLETS.get(crypto, "Contact Admin")
 
-        order_id = create_order(user.id, m_id, crypto)
+        order_id = create_order(user.id, miner_id, crypto)
 
         text = (
-            f"⚠️ {user.first_name} If you send less than {miner['price']:.2f} {crypto} ~ ${miner['price']:.2f} your deposit will be ignored!\n\n"
-            f"✅ Please send the amount to the following address for purchase {miner['name']} with ⚡️ Hashrate {miner['hashrate']}\n\n"
-            f"🛡 All deposits are verified instantly.\n\n"
-            f"`{addr}`"
+            f"⚠️ {user.first_name}, send exactly *${miner['price']:.2f}* in *{crypto.replace('_', ' ')}*.\n"
+            f"Deposits less than ${miner['price']:.2f} will be ignored!\n\n"
+            f"✅ Send payment to the address below to activate *{miner['name']}* ({miner['hashrate']}):\n\n"
+            f"`{addr}`\n\n"
+            f"🛡 All deposits are verified instantly."
         )
-        await query.message.reply_text(text, parse_mode="Markdown")
+        await query.message.reply_text(
+            text, 
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Miner Details", callback_data=f"show_{miner_id}")]])
+        )
 
         if ADMIN_ID:
             admin_msg = (
