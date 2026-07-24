@@ -14,32 +14,44 @@ from telegram.ext import (
     filters
 )
 
-from miners import MINERS
-from wallets import WALLETS
+# Import the keep-alive server
+from keep_alive import keep_alive
+
+# Import database and keyboard functions
 from database import (
     init_db,
-    register_user,
-    set_wallet,
     get_user,
-    get_all_user_ids,
+    register_user,
     get_dashboard_data,
     calculate_uncollected_earnings,
+    request_withdrawal,
     collect_profit,
+    set_wallet,
     create_order,
     approve_deposit,
-    request_withdrawal,
     approve_withdrawal_db,
-    admin_add_balance
+    admin_add_balance,
+    get_all_user_ids,
+    MINERS,
+    WALLETS
 )
 from keyboards import (
     main_menu,
     mining_store_menu,
     single_miner_menu,
-    payment_methods_menu,
+    earnings_menu,
     wallet_menu,
-    earnings_menu
+    payment_methods_menu
 )
 
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Load environment variables
 load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
@@ -47,7 +59,6 @@ CHANNEL_ID = os.getenv("CHANNEL_ID", "")
 
 BANNER_IMAGE = "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?auto=format&fit=crop&w=1200&q=80"
 
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -86,8 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=BANNER_IMAGE, caption=text, parse_mode="Markdown", reply_markup=main_menu())
     elif update.callback_query:
         await update.callback_query.message.reply_photo(photo=BANNER_IMAGE, caption=text, parse_mode="Markdown", reply_markup=main_menu())
-    elif update.callback_query:
-        await update.callback_query.message.reply_photo(photo=BANNER_IMAGE, caption=text, parse_mode="Markdown", reply_markup=main_menu())
+
 
 async def render_dashboard(user_id, context, target_message=None):
     user, ref_count, miners_count = get_dashboard_data(user_id)
@@ -115,8 +125,10 @@ async def render_dashboard(user_id, context, target_message=None):
         await target_message.reply_text(text, parse_mode="Markdown", reply_markup=main_menu())
     return text
 
+
 async def balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await render_dashboard(update.effective_user.id, context, update.message)
+
 
 async def mining_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "⛏️ *SELECT A MINING TIER BELOW TO VIEW DETAILS:*"
@@ -124,6 +136,7 @@ async def mining_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=mining_store_menu())
     elif update.callback_query:
         await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=mining_store_menu())
+
 
 async def show_single_miner(update: Update, context: ContextTypes.DEFAULT_TYPE, miner_id: str):
     miner = MINERS.get(miner_id)
@@ -147,6 +160,7 @@ async def show_single_miner(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             reply_markup=single_miner_menu(miner_id)
         )
 
+
 async def myearnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     total_uncollected, tier = calculate_uncollected_earnings(user_id)
@@ -163,6 +177,7 @@ async def myearnings_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, parse_mode="Markdown", reply_markup=earnings_menu())
     elif update.callback_query:
         await update.callback_query.message.reply_text(text, parse_mode="Markdown", reply_markup=earnings_menu())
+
 
 async def withdraw_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -188,6 +203,7 @@ async def withdraw_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     msg_obj = update.message or update.callback_query.message
     await msg_obj.reply_text(text, parse_mode="Markdown")
+
 
 async def withdraw_amount_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or not context.args[0].replace('.', '', 1).isdigit():
@@ -219,6 +235,7 @@ async def withdraw_amount_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("✅ Approve Withdrawal", callback_data=f"appw_{result}")]])
         await context.bot.send_message(chat_id=ADMIN_ID, text=admin_txt, parse_mode="Markdown", reply_markup=kb)
+
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -324,6 +341,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["approving_w_id"] = w_id
         await query.message.reply_text(f"📝 Reply with the Transaction Proof (TX Hash) for Withdrawal `#{w_id}`:")
 
+
 async def handle_text_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
@@ -362,6 +380,7 @@ async def handle_text_inputs(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 )
                 await context.bot.send_message(chat_id=CHANNEL_ID, text=chan_msg, parse_mode="Markdown", disable_web_page_preview=True)
 
+
 async def admin_add_bal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
@@ -381,6 +400,7 @@ async def admin_add_bal_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     except Exception as e:
         await update.message.reply_text(f"❌ Error updating balance: {e}")
+
 
 async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
@@ -416,11 +436,18 @@ async def admin_broadcast_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE
         parse_mode="Markdown"
     )
 
+
 def main():
+    # 1. Initialize SQLite Database
     init_db()
+
+    # 2. Start Flask Keep-Alive Server for Render
+    keep_alive()
+
+    # 3. Build Application
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # User Commands
+    # --- USER COMMANDS ---
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("balance", balance_cmd))
     app.add_handler(CommandHandler("usdtmining", mining_cmd))
@@ -428,16 +455,18 @@ def main():
     app.add_handler(CommandHandler("withdraw", withdraw_cmd))
     app.add_handler(CommandHandler("withdraw_amount", withdraw_amount_cmd))
     
-    # Admin Commands
+    # --- ADMIN COMMANDS ---
     app.add_handler(CommandHandler("addbalance", admin_add_bal_cmd))
     app.add_handler(CommandHandler("broadcast", admin_broadcast_cmd))
 
-    # Handlers
+    # --- CALLBACK & MESSAGE HANDLERS ---
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_inputs))
 
+    # 4. Start Bot Polling
     print("🚀 SureMine USDŦ Production Bot is live...")
     app.run_polling()
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()
