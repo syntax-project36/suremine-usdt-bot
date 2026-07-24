@@ -34,17 +34,18 @@ from database import (
     get_all_user_ids
 )
 
-# Import keyboards and miners/wallets constants
+# Import keyboards
 from keyboards import (
     main_menu,
     mining_store_menu,
     single_miner_menu,
     earnings_menu,
     wallet_menu,
-    payment_methods_menu,
-    MINERS,
-    WALLETS
+    payment_methods_menu
 )
+
+# Import config constants
+from config import MINERS, WALLETS
 
 # Enable logging
 logging.basicConfig(
